@@ -537,278 +537,288 @@ class PostExtractor:
         }
 
     def extract_photo_link_HQ(self, html: str) -> URL:
-        # Find a link that says "View Full Size"
-        match = self.image_regex.search(html)
-        if match:
-            url = match.groups()[0].replace("&amp;", "&")
-            if not url.startswith("http"):
-                url = utils.urljoin(FB_MOBILE_BASE_URL, url)
-            if url.startswith(utils.urljoin(FB_MOBILE_BASE_URL, "/photo/view_full_size/")):
-                # Try resolve redirect
-                logger.debug(f"Fetching {url}")
-                try:
-                    redirect_response = self.request(url)
-                    url = (
-                        redirect_response.html.find("a", first=True)
-                        .attrs.get("href")
-                        .replace("&amp;", "&")
-                    )
-                except Exception as e:
-                    logger.error(e)
-            return url
-        else:
-            return None
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # # Find a link that says "View Full Size"
+        # match = self.image_regex.search(html)
+        # if match:
+        #     url = match.groups()[0].replace("&amp;", "&")
+        #     if not url.startswith("http"):
+        #         url = utils.urljoin(FB_MOBILE_BASE_URL, url)
+        #     if url.startswith(utils.urljoin(FB_MOBILE_BASE_URL, "/photo/view_full_size/")):
+        #         # Try resolve redirect
+        #         logger.debug(f"Fetching {url}")
+        #         try:
+        #             redirect_response = self.request(url)
+        #             url = (
+        #                 redirect_response.html.find("a", first=True)
+        #                 .attrs.get("href")
+        #                 .replace("&amp;", "&")
+        #             )
+        #         except Exception as e:
+        #             logger.error(e)
+        #     return url
+        # else:
+        #     return None
 
     def extract_photo_link(self) -> PartialPost:
-        if not self.options.get("allow_extra_requests", True) or not self.options.get(
-            "HQ_images", True
-        ):
-            return None
-        images = []
-        descriptions = []
-        image_ids = []
-        raw_photo_links = self.element.find(
-            "div.story_body_container>div a[href*='photo.php'], "
-            "div.story_body_container>div a[href*='/photos/'], "
-            "div._5v64 a[href*='/photos/']"
-        )
-        photo_links = []
-        seen_urls = []
-        for a in raw_photo_links:
-            partial_url = a.attrs["href"].split("?")[0]
-            if partial_url not in seen_urls:
-                photo_links.append(a)
-                seen_urls.append(partial_url)
-        total_photos_in_gallery = len(photo_links)
-        if len(photo_links) in [4, 5] and photo_links[-1].text:
-            total_photos_in_gallery = len(photo_links) + int(photo_links[-1].text.strip("+")) - 1
-            logger.debug(f"{total_photos_in_gallery} total photos in gallery")
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # if not self.options.get("allow_extra_requests", True) or not self.options.get(
+        #     "HQ_images", True
+        # ):
+        #     return None
+        # images = []
+        # descriptions = []
+        # image_ids = []
+        # raw_photo_links = self.element.find(
+        #     "div.story_body_container>div a[href*='photo.php'], "
+        #     "div.story_body_container>div a[href*='/photos/'], "
+        #     "div._5v64 a[href*='/photos/']"
+        # )
+        # photo_links = []
+        # seen_urls = []
+        # for a in raw_photo_links:
+        #     partial_url = a.attrs["href"].split("?")[0]
+        #     if partial_url not in seen_urls:
+        #         photo_links.append(a)
+        #         seen_urls.append(partial_url)
+        # total_photos_in_gallery = len(photo_links)
+        # if len(photo_links) in [4, 5] and photo_links[-1].text:
+        #     total_photos_in_gallery = len(photo_links) + int(photo_links[-1].text.strip("+")) - 1
+        #     logger.debug(f"{total_photos_in_gallery} total photos in gallery")
 
-        # This gets up to 4 images in gallery
-        for link in photo_links:
-            url = link.attrs["href"]
-            if "photoset_token" in url:
-                query = parse_qs(urlparse(url).query)
-                profile_id = query["profileid"][0]
-                token = query["photoset_token"][0]
-                url = f"{profile_id}/posts/{token}"
-                logger.debug(f"Fetching {url}")
-                response = self.request(url)
-                results = self.get_jsmod("mtouch_snowflake_paged_query", response.html)
-                results = list(results["query_results"].values())[0]["media"]
-                video_ids = []
-                videos = []
-                for item in results["edges"]:
-                    node = item["node"]
-                    if node["is_playable"]:
-                        video_ids.append(node["id"])
-                        videos.append(node["playable_url_hd"] or node["playable_url"])
-                        images.append(node["full_width_image"]["uri"])
-                        image_ids.append(node["id"])
-                    else:
-                        url = node["url"]
-                        url = url.replace(FB_W3_BASE_URL, FB_MOBILE_BASE_URL)
-                        logger.debug(f"Fetching {url}")
-                        response = self.request(url)
-                        images.append(self.extract_photo_link_HQ(response.text))
-                        image_ids.append(node["id"])
-                    descriptions.append(node["accessibility_caption"])
-                return {
-                    "image": images[0] if images else None,
-                    "images": images,
-                    "images_description": descriptions,
-                    "image_id": image_ids[0] if image_ids else None,
-                    "image_ids": image_ids,
-                    "video": videos[0] if videos else None,
-                    "video_id": video_ids[0] if video_ids else None,
-                    "video_ids": video_ids,
-                    "videos": videos,
-                }
-            url = utils.urljoin(FB_MOBILE_BASE_URL, url)
-            logger.debug(f"Fetching {url}")
-            try:
-                response = self.request(url)
-                images.append(self.extract_photo_link_HQ(response.text))
-                elem = response.html.find(".img[data-sigil='photo-image']", first=True)
-                descriptions.append(elem.attrs.get("alt") or elem.attrs.get("aria-label"))
-                image_ids.append(re.search(r'[=/](\d+)', url).group(1))
-            except Exception as e:
-                logger.error(e)
-                total_photos_in_gallery -= 1
+        # # This gets up to 4 images in gallery
+        # for link in photo_links:
+        #     url = link.attrs["href"]
+        #     if "photoset_token" in url:
+        #         query = parse_qs(urlparse(url).query)
+        #         profile_id = query["profileid"][0]
+        #         token = query["photoset_token"][0]
+        #         url = f"{profile_id}/posts/{token}"
+        #         logger.debug(f"Fetching {url}")
+        #         response = self.request(url)
+        #         results = self.get_jsmod("mtouch_snowflake_paged_query", response.html)
+        #         results = list(results["query_results"].values())[0]["media"]
+        #         video_ids = []
+        #         videos = []
+        #         for item in results["edges"]:
+        #             node = item["node"]
+        #             if node["is_playable"]:
+        #                 video_ids.append(node["id"])
+        #                 videos.append(node["playable_url_hd"] or node["playable_url"])
+        #                 images.append(node["full_width_image"]["uri"])
+        #                 image_ids.append(node["id"])
+        #             else:
+        #                 url = node["url"]
+        #                 url = url.replace(FB_W3_BASE_URL, FB_MOBILE_BASE_URL)
+        #                 logger.debug(f"Fetching {url}")
+        #                 response = self.request(url)
+        #                 images.append(self.extract_photo_link_HQ(response.text))
+        #                 image_ids.append(node["id"])
+        #             descriptions.append(node["accessibility_caption"])
+        #         return {
+        #             "image": images[0] if images else None,
+        #             "images": images,
+        #             "images_description": descriptions,
+        #             "image_id": image_ids[0] if image_ids else None,
+        #             "image_ids": image_ids,
+        #             "video": videos[0] if videos else None,
+        #             "video_id": video_ids[0] if video_ids else None,
+        #             "video_ids": video_ids,
+        #             "videos": videos,
+        #         }
+        #     url = utils.urljoin(FB_MOBILE_BASE_URL, url)
+        #     logger.debug(f"Fetching {url}")
+        #     try:
+        #         response = self.request(url)
+        #         images.append(self.extract_photo_link_HQ(response.text))
+        #         elem = response.html.find(".img[data-sigil='photo-image']", first=True)
+        #         descriptions.append(elem.attrs.get("alt") or elem.attrs.get("aria-label"))
+        #         image_ids.append(re.search(r'[=/](\d+)', url).group(1))
+        #     except Exception as e:
+        #         logger.error(e)
+        #         total_photos_in_gallery -= 1
 
-        errors = 0
-        while len(images) < total_photos_in_gallery:
-            # More photos to fetch. Follow the left arrow link of the last image we were on
-            direction = '{"tn":"+>"}'
-            if response.html.find("a", containing="Photos from", first=True):
-                # Right arrow link
-                direction = '{"tn":"+="}'
-            url = response.html.find(f"a.touchable[data-gt='{direction}']", first=True).attrs[
-                "href"
-            ]
-            if not url.startswith("http"):
-                url = utils.urljoin(FB_MOBILE_BASE_URL, url)
-            logger.debug(f"Fetching {url}")
-            response = self.request(url)
-            photo_link = self.extract_photo_link_HQ(response.text)
-            if photo_link not in images:
-                images.append(photo_link)
-                elem = response.html.find(".img[data-sigil='photo-image']", first=True)
-                descriptions.append(elem.attrs.get("alt") or elem.attrs.get("aria-label"))
-                image_ids.append(re.search(r'[=/](\d+)', url).group(1))
-            else:
-                errors += 1
-                if errors > 5:
-                    logger.error("Reached image error limit")
-                    break
-        image = images[0] if images else None
-        image_id = image_ids[0] if image_ids else None
-        return {
-            "image": image,
-            "images": images,
-            "images_description": descriptions,
-            "image_id": image_id,
-            "image_ids": image_ids,
-        }
+        # errors = 0
+        # while len(images) < total_photos_in_gallery:
+        #     # More photos to fetch. Follow the left arrow link of the last image we were on
+        #     direction = '{"tn":"+>"}'
+        #     if response.html.find("a", containing="Photos from", first=True):
+        #         # Right arrow link
+        #         direction = '{"tn":"+="}'
+        #     url = response.html.find(f"a.touchable[data-gt='{direction}']", first=True).attrs[
+        #         "href"
+        #     ]
+        #     if not url.startswith("http"):
+        #         url = utils.urljoin(FB_MOBILE_BASE_URL, url)
+        #     logger.debug(f"Fetching {url}")
+        #     response = self.request(url)
+        #     photo_link = self.extract_photo_link_HQ(response.text)
+        #     if photo_link not in images:
+        #         images.append(photo_link)
+        #         elem = response.html.find(".img[data-sigil='photo-image']", first=True)
+        #         descriptions.append(elem.attrs.get("alt") or elem.attrs.get("aria-label"))
+        #         image_ids.append(re.search(r'[=/](\d+)', url).group(1))
+        #     else:
+        #         errors += 1
+        #         if errors > 5:
+        #             logger.error("Reached image error limit")
+        #             break
+        # image = images[0] if images else None
+        # image_id = image_ids[0] if image_ids else None
+        # return {
+        #     "image": image,
+        #     "images": images,
+        #     "images_description": descriptions,
+        #     "image_id": image_id,
+        #     "image_ids": image_ids,
+        # }
 
     def extract_reactors(self, response, reaction_lookup=utils.reaction_lookup):
         """Fetch people reacting to an existing post obtained by `get_posts`.
         Note that this method may raise one more http request per post to get all reactors"""
-        emoji_url_lookup = {}
-        spriteMapCssClass = "sp_LdwxfpG67Bn"
-        emoji_class_lookup = utils.emoji_class_lookup
-        reaction_icons = self.get_jsmod("UFIReactionIcons")
-        if reaction_icons:
-            for k, v in reaction_icons.items():
-                name = reaction_lookup[k]["display_name"].lower()
-                for item in v.values():
-                    emoji_class_lookup[item["spriteCssClass"]] = name
-                    spriteMapCssClass = item["spriteMapCssClass"]
-        for sigil in response.html.find("span[data-sigil='reaction_profile_sigil']"):
-            single_reaction = demjson.decode(sigil.attrs.get("data-store"))
-            if "reactionType" in single_reaction:
-                k = str(single_reaction["reactionType"])
-            else:
-                k = str(single_reaction["reactionID"])
-            if k == "all":
-                continue
-            name = reaction_lookup[k]["display_name"].lower()
-            emoji_style = sigil.find("i", first=True).attrs.get("style")
-            emoji_url = utils.get_background_image_url(emoji_style)
-            emoji_url_lookup[emoji_url] = name
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # emoji_url_lookup = {}
+        # spriteMapCssClass = "sp_LdwxfpG67Bn"
+        # emoji_class_lookup = utils.emoji_class_lookup
+        # reaction_icons = self.get_jsmod("UFIReactionIcons")
+        # if reaction_icons:
+        #     for k, v in reaction_icons.items():
+        #         name = reaction_lookup[k]["display_name"].lower()
+        #         for item in v.values():
+        #             emoji_class_lookup[item["spriteCssClass"]] = name
+        #             spriteMapCssClass = item["spriteMapCssClass"]
+        # for sigil in response.html.find("span[data-sigil='reaction_profile_sigil']"):
+        #     single_reaction = demjson.decode(sigil.attrs.get("data-store"))
+        #     if "reactionType" in single_reaction:
+        #         k = str(single_reaction["reactionType"])
+        #     else:
+        #         k = str(single_reaction["reactionID"])
+        #     if k == "all":
+        #         continue
+        #     name = reaction_lookup[k]["display_name"].lower()
+        #     emoji_style = sigil.find("i", first=True).attrs.get("style")
+        #     emoji_url = utils.get_background_image_url(emoji_style)
+        #     emoji_url_lookup[emoji_url] = name
 
-        reactors_opt = self.options.get("reactors")
-        limit = 1e9
-        if type(reactors_opt) in [int, float] and reactors_opt < limit:
-            limit = reactors_opt
-        logger.debug(f"Fetching {limit} reactors")
-        elems = list(response.html.find("div[id^='reaction_profile_browser']>div"))
-        for elem in elems:
-            try:
-                emoji_class = elem.find(f"div>i.{spriteMapCssClass}", first=True).attrs.get(
-                    "class"
-                )[-1]
-                reaction_type = emoji_class_lookup.get(emoji_class)
-                if not reaction_type:
-                    logger.error(f"Don't know {emoji_class}")
-            except AttributeError:
-                try:
-                    emoji_style = elem.find(f"div>i[style]", first=True).attrs.get("style")
-                    emoji_url = utils.get_background_image_url(emoji_style)
-                    reaction_type = emoji_url_lookup.get(emoji_url)
-                    if not reaction_type:
-                        logger.error(f"Don't know {emoji_url}")
-                except AttributeError:
-                    logger.error(f"No div>i[style] elem in: {elem}")
-                    reaction_type = None
-            yield {
-                "name": elem.find("strong", first=True).text,
-                "link": utils.urljoin(FB_BASE_URL, elem.find("a", first=True).attrs.get("href")),
-                "type": reaction_type,
-            }
-        more = response.html.find("div[id^=reaction_profile_pager] a", first=True)
-        while more and len(elems) < limit:
-            url = utils.urljoin(FB_MOBILE_BASE_URL, more.attrs.get("href"))
-            logger.debug(f"Fetching {url}")
-            try:
-                response = self.request(url)
-            except Exception as e:
-                logger.error(e)
-                break
-            prefix_length = len('for (;;);')
-            data = json.loads(response.text[prefix_length:])  # Strip 'for (;;);'
-            more = None
-            for action in data['payload']['actions']:
-                if action['cmd'] == 'append':
-                    html = utils.make_html_element(
-                        f"<div id='reaction_profile_browser'>{action['html']}</div>",
-                        url=FB_MOBILE_BASE_URL,
-                    )
-                    elems = html.find(
-                        'div#reaction_profile_browser>div,div#reaction_profile_browser1>div'
-                    )
-                    for elem in elems:
-                        if not elem.find(f"div>i.{spriteMapCssClass}", first=True):
-                            # Try update spriteMapCssClass
-                            classes = elem.find("div>i.img", first=True).attrs["class"]
-                            for c in classes:
-                                if c.startswith("sp_"):
-                                    spriteMapCssClass = c
-                        try:
-                            emoji_class = elem.find(
-                                f"div>i.{spriteMapCssClass}", first=True
-                            ).attrs.get("class")[-1]
-                            reaction_type = emoji_class_lookup.get(emoji_class)
-                            if not reaction_type:
-                                logger.error(f"Don't know {emoji_class}")
-                        except AttributeError:
-                            try:
-                                emoji_style = elem.find(f"div>i[style]", first=True).attrs.get(
-                                    "style"
-                                )
-                                emoji_url = utils.get_background_image_url(emoji_style)
-                                reaction_type = emoji_url_lookup.get(emoji_url)
-                                if not reaction_type:
-                                    logger.error(f"Don't know {emoji_url}")
-                            except AttributeError:
-                                logger.error(f"No div>i[style] elem in: {elem.html}")
-                                reaction_type = None
-                        yield {
-                            "name": elem.find("strong", first=True).text,
-                            "link": utils.urljoin(
-                                FB_BASE_URL, elem.find("a", first=True).attrs.get("href")
-                            ),
-                            "type": reaction_type,
-                        }
-                elif action['cmd'] == 'replace':
-                    html = utils.make_html_element(
-                        f"<div id='reaction_profile_browser'>{action['html']}</div>",
-                        url=FB_MOBILE_BASE_URL,
-                    )
-                    more = html.find("div#reaction_profile_pager a", first=True)
+        # reactors_opt = self.options.get("reactors")
+        # limit = 1e9
+        # if type(reactors_opt) in [int, float] and reactors_opt < limit:
+        #     limit = reactors_opt
+        # logger.debug(f"Fetching {limit} reactors")
+        # elems = list(response.html.find("div[id^='reaction_profile_browser']>div"))
+        # for elem in elems:
+        #     try:
+        #         emoji_class = elem.find(f"div>i.{spriteMapCssClass}", first=True).attrs.get(
+        #             "class"
+        #         )[-1]
+        #         reaction_type = emoji_class_lookup.get(emoji_class)
+        #         if not reaction_type:
+        #             logger.error(f"Don't know {emoji_class}")
+        #     except AttributeError:
+        #         try:
+        #             emoji_style = elem.find(f"div>i[style]", first=True).attrs.get("style")
+        #             emoji_url = utils.get_background_image_url(emoji_style)
+        #             reaction_type = emoji_url_lookup.get(emoji_url)
+        #             if not reaction_type:
+        #                 logger.error(f"Don't know {emoji_url}")
+        #         except AttributeError:
+        #             logger.error(f"No div>i[style] elem in: {elem}")
+        #             reaction_type = None
+        #     yield {
+        #         "name": elem.find("strong", first=True).text,
+        #         "link": utils.urljoin(FB_BASE_URL, elem.find("a", first=True).attrs.get("href")),
+        #         "type": reaction_type,
+        #     }
+        # more = response.html.find("div[id^=reaction_profile_pager] a", first=True)
+        # while more and len(elems) < limit:
+        #     url = utils.urljoin(FB_MOBILE_BASE_URL, more.attrs.get("href"))
+        #     logger.debug(f"Fetching {url}")
+        #     try:
+        #         response = self.request(url)
+        #     except Exception as e:
+        #         logger.error(e)
+        #         break
+        #     prefix_length = len('for (;;);')
+        #     data = json.loads(response.text[prefix_length:])  # Strip 'for (;;);'
+        #     more = None
+        #     for action in data['payload']['actions']:
+        #         if action['cmd'] == 'append':
+        #             html = utils.make_html_element(
+        #                 f"<div id='reaction_profile_browser'>{action['html']}</div>",
+        #                 url=FB_MOBILE_BASE_URL,
+        #             )
+        #             elems = html.find(
+        #                 'div#reaction_profile_browser>div,div#reaction_profile_browser1>div'
+        #             )
+        #             for elem in elems:
+        #                 if not elem.find(f"div>i.{spriteMapCssClass}", first=True):
+        #                     # Try update spriteMapCssClass
+        #                     classes = elem.find("div>i.img", first=True).attrs["class"]
+        #                     for c in classes:
+        #                         if c.startswith("sp_"):
+        #                             spriteMapCssClass = c
+        #                 try:
+        #                     emoji_class = elem.find(
+        #                         f"div>i.{spriteMapCssClass}", first=True
+        #                     ).attrs.get("class")[-1]
+        #                     reaction_type = emoji_class_lookup.get(emoji_class)
+        #                     if not reaction_type:
+        #                         logger.error(f"Don't know {emoji_class}")
+        #                 except AttributeError:
+        #                     try:
+        #                         emoji_style = elem.find(f"div>i[style]", first=True).attrs.get(
+        #                             "style"
+        #                         )
+        #                         emoji_url = utils.get_background_image_url(emoji_style)
+        #                         reaction_type = emoji_url_lookup.get(emoji_url)
+        #                         if not reaction_type:
+        #                             logger.error(f"Don't know {emoji_url}")
+        #                     except AttributeError:
+        #                         logger.error(f"No div>i[style] elem in: {elem.html}")
+        #                         reaction_type = None
+        #                 yield {
+        #                     "name": elem.find("strong", first=True).text,
+        #                     "link": utils.urljoin(
+        #                         FB_BASE_URL, elem.find("a", first=True).attrs.get("href")
+        #                     ),
+        #                     "type": reaction_type,
+        #                 }
+        #         elif action['cmd'] == 'replace':
+        #             html = utils.make_html_element(
+        #                 f"<div id='reaction_profile_browser'>{action['html']}</div>",
+        #                 url=FB_MOBILE_BASE_URL,
+        #             )
+        #             more = html.find("div#reaction_profile_pager a", first=True)
 
     def extract_sharers(self):
-        """Fetch people sharing an existing post obtained by `get_posts`.
-        Note that this method may raise more http requests per post to get all sharers"""
-        share_url = f'https://m.facebook.com/browse/shares?id={self.post.get("post_id")}'
-        while share_url:
-            logger.debug(f"Fetching {share_url}")
-            response = self.request(share_url)
-            elems = response.html.find("div.item:not(#m_more_item)")
-            for elem in elems:
-                yield {
-                    "name": elem.find("strong", first=True).text,
-                    "link": utils.urljoin(
-                        FB_BASE_URL, elem.find("a", first=True).attrs.get("href")
-                    ),
-                }
-            more = response.html.find("#m_more_item a", first=True)
-            if more:
-                share_url = more.attrs.get("href")
-            else:
-                share_url = None
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # """Fetch people sharing an existing post obtained by `get_posts`.
+        # Note that this method may raise more http requests per post to get all sharers"""
+        # share_url = f'https://m.facebook.com/browse/shares?id={self.post.get("post_id")}'
+        # while share_url:
+        #     logger.debug(f"Fetching {share_url}")
+        #     response = self.request(share_url)
+        #     elems = response.html.find("div.item:not(#m_more_item)")
+        #     for elem in elems:
+        #         yield {
+        #             "name": elem.find("strong", first=True).text,
+        #             "link": utils.urljoin(
+        #                 FB_BASE_URL, elem.find("a", first=True).attrs.get("href")
+        #             ),
+        #         }
+        #     more = response.html.find("#m_more_item a", first=True)
+        #     if more:
+        #         share_url = more.attrs.get("href")
+        #     else:
+        #         share_url = None
 
     def extract_reactions(self, post_id=None, force_parse_HTML=False) -> PartialPost:
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
         """Fetch share and reactions information with a existing post obtained by `get_posts`.
         Return a merged post that has some new fields including `reactions`, `w3_fb_url`,
         `fetched_time`, and reactions fields `LIKE`, `ANGER`, `SORRY`, `WOW`, `LOVE`, `HAHA` if
@@ -823,223 +833,239 @@ class PostExtractor:
             print(more_info_post)
         ```
         """
-        reactions = {}
+        # reactions = {}
 
-        reaction_lookup = utils.reaction_lookup
-        reaction_lookup_jsmod = self.get_jsmod("UFIReactionTypes")
-        if reaction_lookup_jsmod:
-            reaction_lookup.update(reaction_lookup_jsmod.get("reactions"))
-        for k, v in self.live_data.get("reactioncountmap", {}).items():
-            if v["default"]:
-                name = reaction_lookup[k]["display_name"].lower()
-                reactions[name] = v["default"]
-        reaction_count = self.live_data.get("reactioncount")
+        # reaction_lookup = utils.reaction_lookup
+        # reaction_lookup_jsmod = self.get_jsmod("UFIReactionTypes")
+        # if reaction_lookup_jsmod:
+        #     reaction_lookup.update(reaction_lookup_jsmod.get("reactions"))
+        # for k, v in self.live_data.get("reactioncountmap", {}).items():
+        #     if v["default"]:
+        #         name = reaction_lookup[k]["display_name"].lower()
+        #         reactions[name] = v["default"]
+        # reaction_count = self.live_data.get("reactioncount")
 
-        url = self.post.get('post_url')
-        if not post_id:
-            post_id = self.post.get("post_id")
-        w3_fb_url = url and utils.urlparse(url)._replace(netloc='www.facebook.com').geturl()
+        # url = self.post.get('post_url')
+        # if not post_id:
+        #     post_id = self.post.get("post_id")
+        # w3_fb_url = url and utils.urlparse(url)._replace(netloc='www.facebook.com').geturl()
 
-        reactors_opt = self.options.get("reactors")
-        reactors = []
-        if reactors_opt:
-            reaction_url = f'https://m.facebook.com/ufi/reaction/profile/browser/?ft_ent_identifier={post_id}'
-            logger.debug(f"Fetching {reaction_url}")
-            response = self.request(reaction_url)
-            if not reactions or force_parse_HTML:
-                reactions = {}
-                reaction_count = 0
-                for sigil in response.html.find("span[data-sigil='reaction_profile_sigil']"):
-                    single_reaction = demjson.decode(sigil.attrs.get("data-store"))
-                    if "reactionType" in single_reaction:
-                        k = str(single_reaction["reactionType"])
-                    else:
-                        k = str(single_reaction["reactionID"])
-                    v = sigil.find(
-                        "span[data-sigil='reaction_profile_tab_count']", first=True
-                    ).text.replace("All ", "")
-                    v = utils.convert_numeric_abbr(v)
-                    if k == "all":
-                        reaction_count = v
-                    elif k in reaction_lookup:
-                        name = reaction_lookup[k]["display_name"].lower()
-                        reactions[name] = v
-                if not reaction_count:
-                    reaction_count = sum(reactions.values())
-            reactors = self.extract_reactors(response, reaction_lookup)
+        # reactors_opt = self.options.get("reactors")
+        # reactors = []
+        # if reactors_opt:
+        #     reaction_url = f'https://m.facebook.com/ufi/reaction/profile/browser/?ft_ent_identifier={post_id}'
+        #     logger.debug(f"Fetching {reaction_url}")
+        #     response = self.request(reaction_url)
+        #     if not reactions or force_parse_HTML:
+        #         reactions = {}
+        #         reaction_count = 0
+        #         for sigil in response.html.find("span[data-sigil='reaction_profile_sigil']"):
+        #             single_reaction = demjson.decode(sigil.attrs.get("data-store"))
+        #             if "reactionType" in single_reaction:
+        #                 k = str(single_reaction["reactionType"])
+        #             else:
+        #                 k = str(single_reaction["reactionID"])
+        #             v = sigil.find(
+        #                 "span[data-sigil='reaction_profile_tab_count']", first=True
+        #             ).text.replace("All ", "")
+        #             v = utils.convert_numeric_abbr(v)
+        #             if k == "all":
+        #                 reaction_count = v
+        #             elif k in reaction_lookup:
+        #                 name = reaction_lookup[k]["display_name"].lower()
+        #                 reactions[name] = v
+        #         if not reaction_count:
+        #             reaction_count = sum(reactions.values())
+        #     reactors = self.extract_reactors(response, reaction_lookup)
 
-        if reactions:
-            return {
-                'likes': reactions.get("like"),
-                'reactions': reactions,
-                'reaction_count': reaction_count,
-                'reactors': reactors,
-                'fetched_time': datetime.now(),
-                'w3_fb_url': w3_fb_url,
-            }
+        # if reactions:
+        #     return {
+        #         'likes': reactions.get("like"),
+        #         'reactions': reactions,
+        #         'reaction_count': reaction_count,
+        #         'reactors': reactors,
+        #         'fetched_time': datetime.now(),
+        #         'w3_fb_url': w3_fb_url,
+        #     }
 
-        if url:
-            resp = self.request(w3_fb_url)
-            for item in self.parse_share_and_reactions(resp.text):
-                data = item['jsmods']['pre_display_requires'][0][3][1]['__bbox']['result'][
-                    'data'
-                ]['feedback']
-                if data['subscription_target_id'] == post_id:
-                    return {
-                        'shares': data['share_count']['count'],
-                        'likes': data['reactors']['count'],
-                        'reactions': {
-                            reaction['node']['reaction_type'].lower(): reaction['reaction_count']
-                            for reaction in data['top_reactions']['edges']
-                        },
-                        'comments': data['comment_count']['total_count'],
-                        'w3_fb_url': data['url'],
-                        'fetched_time': datetime.now(),
-                    }
-        return {'fetched_time': datetime.now()}
+        # if url:
+        #     resp = self.request(w3_fb_url)
+        #     for item in self.parse_share_and_reactions(resp.text):
+        #         data = item['jsmods']['pre_display_requires'][0][3][1]['__bbox']['result'][
+        #             'data'
+        #         ]['feedback']
+        #         if data['subscription_target_id'] == post_id:
+        #             return {
+        #                 'shares': data['share_count']['count'],
+        #                 'likes': data['reactors']['count'],
+        #                 'reactions': {
+        #                     reaction['node']['reaction_type'].lower(): reaction['reaction_count']
+        #                     for reaction in data['top_reactions']['edges']
+        #                 },
+        #                 'comments': data['comment_count']['total_count'],
+        #                 'w3_fb_url': data['url'],
+        #                 'fetched_time': datetime.now(),
+        #             }
+        # return {'fetched_time': datetime.now()}
 
     def extract_video(self):
-        video_data_element = self.element.find('[data-sigil="inlineVideo"]', first=True)
-        photoset_link = self.element.find("a[href*='photoset_token']", first=True)
-        if photoset_link and photoset_link.find("i[aria-label='video']"):
-            query = parse_qs(urlparse(photoset_link.attrs.get("href")).query)
-            video_id = query["photo"][0]
-            if video_id != self.post["post_id"]:
-                logger.debug(f"Fetching {video_id}")
-                response = self.request(video_id)
-                video_post = PostExtractor(
-                    response.html, self.options, self.request, full_post_html=response.html
-                )
-                video_post.post = {"post_id": video_id}
-                meta = video_post.extract_video_meta() or {}
-                return {
-                    "video_id": video_id,
-                    "video": video_post.extract_video().get("video"),
-                    **meta,
-                }
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # video_data_element = self.element.find('[data-sigil="inlineVideo"]', first=True)
+        # photoset_link = self.element.find("a[href*='photoset_token']", first=True)
+        # if photoset_link and photoset_link.find("i[aria-label='video']"):
+        #     query = parse_qs(urlparse(photoset_link.attrs.get("href")).query)
+        #     video_id = query["photo"][0]
+        #     if video_id != self.post["post_id"]:
+        #         logger.debug(f"Fetching {video_id}")
+        #         response = self.request(video_id)
+        #         video_post = PostExtractor(
+        #             response.html, self.options, self.request, full_post_html=response.html
+        #         )
+        #         video_post.post = {"post_id": video_id}
+        #         meta = video_post.extract_video_meta() or {}
+        #         return {
+        #             "video_id": video_id,
+        #             "video": video_post.extract_video().get("video"),
+        #             **meta,
+        #         }
 
-        if video_data_element is None:
-            return None
-        if self.options.get('youtube_dl'):
-            vid = self.extract_video_highres()
-            if vid:
-                return vid
-        return self.extract_video_lowres(video_data_element)
+        # if video_data_element is None:
+        #     return None
+        # if self.options.get('youtube_dl'):
+        #     vid = self.extract_video_highres()
+        #     if vid:
+        #         return vid
+        # return self.extract_video_lowres(video_data_element)
 
     def extract_video_lowres(self, video_data_element):
-        try:
-            data = demjson.decode(video_data_element.attrs['data-store'].replace("\\\\", "\\"))
-            return {'video': data.get('src').replace("\\/", "/")}
-        except JSONDecodeError as ex:
-            logger.error("Error parsing data-store JSON: %r", ex)
-        except KeyError:
-            logger.error("data-store attribute not found")
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
         return None
+        # try:
+        #     data = demjson.decode(video_data_element.attrs['data-store'].replace("\\\\", "\\"))
+        #     return {'video': data.get('src').replace("\\/", "/")}
+        # except JSONDecodeError as ex:
+        #     logger.error("Error parsing data-store JSON: %r", ex)
+        # except KeyError:
+        #     logger.error("data-store attribute not found")
+        # return None
 
     def extract_video_highres(self):
-        if not YoutubeDL:
-            raise ModuleNotFoundError(
-                "youtube-dl must be installed to download videos in high resolution."
-            )
-
-        ydl_opts = {
-            'format': 'best',
-            'quiet': True,
-        }
-        if self.options.get('youtube_dl_verbose'):
-            ydl_opts['quiet'] = False
-
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                url = ydl.extract_info(self.post.get("post_url"), download=False)['url']
-                return {'video': url}
-        except ExtractorError as ex:
-            logger.error("Error extracting video with youtube-dl: %r", ex)
-
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
         return None
+        # if not YoutubeDL:
+        #     raise ModuleNotFoundError(
+        #         "youtube-dl must be installed to download videos in high resolution."
+        #     )
+
+        # ydl_opts = {
+        #     'format': 'best',
+        #     'quiet': True,
+        # }
+        # if self.options.get('youtube_dl_verbose'):
+        #     ydl_opts['quiet'] = False
+
+        # try:
+        #     with YoutubeDL(ydl_opts) as ydl:
+        #         url = ydl.extract_info(self.post.get("post_url"), download=False)['url']
+        #         return {'video': url}
+        # except ExtractorError as ex:
+        #     logger.error("Error extracting video with youtube-dl: %r", ex)
+
+        # return None
 
     def extract_video_thumbnail(self):
-        thumbnail_element = self.element.find('i[data-sigil="playInlineVideo"]', first=True)
-        if not thumbnail_element:
-            return None
-        style = thumbnail_element.attrs.get('style', '')
-        match = self.video_thumbnail_regex.search(style)
-        if match:
-            return {'video_thumbnail': utils.decode_css_url(match.groups()[0])}
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
         return None
+        # thumbnail_element = self.element.find('i[data-sigil="playInlineVideo"]', first=True)
+        # if not thumbnail_element:
+        #     return None
+        # style = thumbnail_element.attrs.get('style', '')
+        # match = self.video_thumbnail_regex.search(style)
+        # if match:
+        #     return {'video_thumbnail': utils.decode_css_url(match.groups()[0])}
+        # return None
 
     def extract_video_id(self):
-        match = self.video_id_regex.search(self.element.html)
-        if match:
-            return {'video_id': match.groups()[0]}
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
         return None
+        # match = self.video_id_regex.search(self.element.html)
+        # if match:
+        #     return {'video_id': match.groups()[0]}
+        # return None
 
     def extract_video_meta(self):
-        elem = self.full_post_html.find("script[type='application/ld+json']", first=True)
-        if not elem:
-            return None
-        meta = json.loads(elem.text)
-        if meta.get("@type") != "VideoObject":
-            return
-        watches = 0
-        if "interactionStatistic" in meta:
-            for interaction in meta["interactionStatistic"]:
-                if interaction.get("interactionType")["@type"] == 'http://schema.org/WatchAction':
-                    watches = interaction.get("userInteractionCount")
-        contentSize = None
-        if meta.get("contentSize"):
-            contentSize = float(meta['contentSize'].strip("kB")) / 1000
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # elem = self.full_post_html.find("script[type='application/ld+json']", first=True)
+        # if not elem:
+        #     return None
+        # meta = json.loads(elem.text)
+        # if meta.get("@type") != "VideoObject":
+        #     return
+        # watches = 0
+        # if "interactionStatistic" in meta:
+        #     for interaction in meta["interactionStatistic"]:
+        #         if interaction.get("interactionType")["@type"] == 'http://schema.org/WatchAction':
+        #             watches = interaction.get("userInteractionCount")
+        # contentSize = None
+        # if meta.get("contentSize"):
+        #     contentSize = float(meta['contentSize'].strip("kB")) / 1000
 
-        time = utils.parse_datetime(meta["datePublished"])
-        # Remove the timezone attribute to make it timezone-naive
-        time = time.astimezone().replace(tzinfo=None)
-        return {
-            "time": time,
-            'video_duration_seconds': utils.parse_duration(meta.get("duration")),
-            'video_watches': watches,
-            'video_quality': meta.get('videoQuality'),
-            'video_width': meta.get('width'),
-            'video_height': meta.get('height'),
-            'video_size_MB': contentSize,
-        }
+        # time = utils.parse_datetime(meta["datePublished"])
+        # # Remove the timezone attribute to make it timezone-naive
+        # time = time.astimezone().replace(tzinfo=None)
+        # return {
+        #     "time": time,
+        #     'video_duration_seconds': utils.parse_duration(meta.get("duration")),
+        #     'video_watches': watches,
+        #     'video_quality': meta.get('videoQuality'),
+        #     'video_width': meta.get('width'),
+        #     'video_height': meta.get('height'),
+        #     'video_size_MB': contentSize,
+        # }
 
     def extract_is_live(self):
         header = self.element.find('header')[0].full_text
         return {'is_live': "is live" in header, 'was_live': "was live" in header}
 
     def extract_factcheck(self):
-        button = self.element.find('button[value="See Why"]', first=True)
-        if not button:
-            return None
-        factcheck_div = button.element.getparent().getparent()
-        factcheck = ""
-        for text in factcheck_div.itertext():
-            if text.strip() == "See Why":
-                continue
-            factcheck += text + "\n"
-        return {'factcheck': factcheck}
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # button = self.element.find('button[value="See Why"]', first=True)
+        # if not button:
+        #     return None
+        # factcheck_div = button.element.getparent().getparent()
+        # factcheck = ""
+        # for text in factcheck_div.itertext():
+        #     if text.strip() == "See Why":
+        #         continue
+        #     factcheck += text + "\n"
+        # return {'factcheck': factcheck}
 
     def extract_share_information(self):
-        if not self.data_ft.get("original_content_id"):
-            return None
-        logger.debug(
-            "%s is a share of %s", self.post["post_id"], self.data_ft["original_content_id"]
-        )
-        # A shared post contains an <article> element within it's own <article> element, or a header element for a shared image
-        raw_post = self.element.find(
-            "article article, .story_body_container .story_body_container header", first=True
-        )
-        # We can re-use the existing parsers, as a one level deep recursion
-        shared_post = PostExtractor(raw_post, self.options, self.request)
-        shared_user_info = shared_post.extract_username()
-        return {
-            'shared_post_id': self.data_ft["original_content_id"],
-            'shared_time': shared_post.extract_time().get("time"),
-            'shared_user_id': self.data_ft["original_content_owner_id"],
-            'shared_username': shared_user_info.get("username"),
-            'shared_user_url': shared_user_info.get("user_url"),
-            'shared_post_url': shared_post.extract_post_url().get("post_url"),
-        }
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # if not self.data_ft.get("original_content_id"):
+        #     return None
+        # logger.debug(
+        #     "%s is a share of %s", self.post["post_id"], self.data_ft["original_content_id"]
+        # )
+        # # A shared post contains an <article> element within it's own <article> element, or a header element for a shared image
+        # raw_post = self.element.find(
+        #     "article article, .story_body_container .story_body_container header", first=True
+        # )
+        # # We can re-use the existing parsers, as a one level deep recursion
+        # shared_post = PostExtractor(raw_post, self.options, self.request)
+        # shared_user_info = shared_post.extract_username()
+        # return {
+        #     'shared_post_id': self.data_ft["original_content_id"],
+        #     'shared_time': shared_post.extract_time().get("time"),
+        #     'shared_user_id': self.data_ft["original_content_owner_id"],
+        #     'shared_username': shared_user_info.get("username"),
+        #     'shared_user_url': shared_user_info.get("user_url"),
+        #     'shared_post_url': shared_post.extract_post_url().get("post_url"),
+        # }
 
     def extract_availability(self):
         return {
@@ -1047,291 +1073,299 @@ class PostExtractor:
         }
 
     def parse_comment(self, comment):
-        comment_id = comment.attrs.get("id")
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # comment_id = comment.attrs.get("id")
 
-        try:
-            profile_picture = comment.find(".profpic.img", first=True)
-            name = profile_picture.attrs.get("alt") or profile_picture.attrs.get("aria-label")
-            name = name.split(",")[0]
-            commenter_id = re.search(r'feed_story_ring(\d+)', comment.html)
-            if commenter_id:
-                commenter_id = commenter_id.group(1)
+        # try:
+        #     profile_picture = comment.find(".profpic.img", first=True)
+        #     name = profile_picture.attrs.get("alt") or profile_picture.attrs.get("aria-label")
+        #     name = name.split(",")[0]
+        #     commenter_id = re.search(r'feed_story_ring(\d+)', comment.html)
+        #     if commenter_id:
+        #         commenter_id = commenter_id.group(1)
 
-            url = profile_picture.element.getparent().attrib.get("href")
-            if url:
-                url = utils.urljoin(FB_BASE_URL, url)
-        except AttributeError:
-            name = comment.find("h3", first=True).text
-            commenter_id = None
-            url = None
-            link = comment.find("h3>a", first=True)
-            if link:
-                url = utils.urljoin(FB_BASE_URL, link.attrs.get("href"))
-        first_link = comment.find(
-            "div:not([data-sigil])>a[href]:not([data-click]):not([data-store]):not([data-sigil])",
-            first=True,
-        )
-        comment_body_elem = comment.find(
-            '[data-sigil="comment-body"],div._14ye,div.bl', first=True
-        )
-        if not comment_body_elem:
-            comment_body_elem = comment.find('div>div>div', first=True)
-        if comment_body_elem:
-            text = comment_body_elem.text
-        else:
-            text = comment.text
-        commenter_meta = None
-        if first_link:
-            if "\n" in first_link.text:
-                commenter_meta = first_link.text.split("\n")[0]
+        #     url = profile_picture.element.getparent().attrib.get("href")
+        #     if url:
+        #         url = utils.urljoin(FB_BASE_URL, url)
+        # except AttributeError:
+        #     name = comment.find("h3", first=True).text
+        #     commenter_id = None
+        #     url = None
+        #     link = comment.find("h3>a", first=True)
+        #     if link:
+        #         url = utils.urljoin(FB_BASE_URL, link.attrs.get("href"))
+        # first_link = comment.find(
+        #     "div:not([data-sigil])>a[href]:not([data-click]):not([data-store]):not([data-sigil])",
+        #     first=True,
+        # )
+        # comment_body_elem = comment.find(
+        #     '[data-sigil="comment-body"],div._14ye,div.bl', first=True
+        # )
+        # if not comment_body_elem:
+        #     comment_body_elem = comment.find('div>div>div', first=True)
+        # if comment_body_elem:
+        #     text = comment_body_elem.text
+        # else:
+        #     text = comment.text
+        # commenter_meta = None
+        # if first_link:
+        #     if "\n" in first_link.text:
+        #         commenter_meta = first_link.text.split("\n")[0]
 
-        # Try to extract from the abbr element
-        date_element = comment.find('abbr', first=True)
-        if date_element:
-            date = utils.parse_datetime(date_element.text, search=True)
-            if not date:
-                logger.debug(f"Unable to parse {date_element.text}")
-        else:
-            date = None
+        # # Try to extract from the abbr element
+        # date_element = comment.find('abbr', first=True)
+        # if date_element:
+        #     date = utils.parse_datetime(date_element.text, search=True)
+        #     if not date:
+        #         logger.debug(f"Unable to parse {date_element.text}")
+        # else:
+        #     date = None
 
-        image_url = comment.find('a[href^="https://lm.facebook.com/l.php"]', first=True)
-        if image_url:
-            image_url = parse_qs(urlparse(image_url.attrs["href"]).query).get("u")[0]
-        else:
-            image_url = comment.find('i.img:not(.profpic)[style]', first=True)
-            if image_url:
-                match = self.image_regex_lq.search(image_url.attrs["style"])
-                if match:
-                    image_url = utils.decode_css_url(match.groups()[0])
+        # image_url = comment.find('a[href^="https://lm.facebook.com/l.php"]', first=True)
+        # if image_url:
+        #     image_url = parse_qs(urlparse(image_url.attrs["href"]).query).get("u")[0]
+        # else:
+        #     image_url = comment.find('i.img:not(.profpic)[style]', first=True)
+        #     if image_url:
+        #         match = self.image_regex_lq.search(image_url.attrs["style"])
+        #         if match:
+        #             image_url = utils.decode_css_url(match.groups()[0])
 
-        reactions = {}
-        comment_reactors_opt = self.options.get(
-            "comment_reactors", self.options.get("reactions") or self.options.get("reactors")
-        )
-        if comment_reactors_opt:
-            self.options["reactors"] = True  # Required for comment reaction extraction
-            reactors = comment.find(
-                'a[href^="/ufi/reaction/profile/browser/?ft_ent_identifier="] i,'
-                'a[href^="/ufi/reaction/profile/browser/?ft_ent_identifier="] img',
-                first=True,
-            )
-            if reactors:
-                reactions = self.extract_reactions(comment_id, force_parse_HTML=True)
-                if comment_reactors_opt != "generator":
-                    reactions["reactors"] = utils.safe_consume(reactions.get("reactors", []))
-        else:
-            reactions_count = comment.find('span._14va', first=True)
-            if reactions_count and len(reactions_count.text) > 0:
-                reactions_count = reactions_count.text
-            else:
-                reactions_count = None
-            reactions.update({"reaction_count": reactions_count})
+        # reactions = {}
+        # comment_reactors_opt = self.options.get(
+        #     "comment_reactors", self.options.get("reactions") or self.options.get("reactors")
+        # )
+        # if comment_reactors_opt:
+        #     self.options["reactors"] = True  # Required for comment reaction extraction
+        #     reactors = comment.find(
+        #         'a[href^="/ufi/reaction/profile/browser/?ft_ent_identifier="] i,'
+        #         'a[href^="/ufi/reaction/profile/browser/?ft_ent_identifier="] img',
+        #         first=True,
+        #     )
+        #     if reactors:
+        #         reactions = self.extract_reactions(comment_id, force_parse_HTML=True)
+        #         if comment_reactors_opt != "generator":
+        #             reactions["reactors"] = utils.safe_consume(reactions.get("reactors", []))
+        # else:
+        #     reactions_count = comment.find('span._14va', first=True)
+        #     if reactions_count and len(reactions_count.text) > 0:
+        #         reactions_count = reactions_count.text
+        #     else:
+        #         reactions_count = None
+        #     reactions.update({"reaction_count": reactions_count})
 
-        return {
-            "comment_id": comment_id,
-            "comment_url": utils.urljoin(FB_BASE_URL, comment_id),
-            "commenter_id": commenter_id,
-            "commenter_url": url,
-            "commenter_name": name,
-            "commenter_meta": commenter_meta,
-            "comment_text": text,
-            "comment_time": date,
-            "comment_image": image_url,
-            "comment_reactors": reactions.get("reactors", []),
-            "comment_reactions": reactions.get("reactions"),
-            "comment_reaction_count": reactions.get("reaction_count"),
-        }
+        # return {
+        #     "comment_id": comment_id,
+        #     "comment_url": utils.urljoin(FB_BASE_URL, comment_id),
+        #     "commenter_id": commenter_id,
+        #     "commenter_url": url,
+        #     "commenter_name": name,
+        #     "commenter_meta": commenter_meta,
+        #     "comment_text": text,
+        #     "comment_time": date,
+        #     "comment_image": image_url,
+        #     "comment_reactors": reactions.get("reactors", []),
+        #     "comment_reactions": reactions.get("reactions"),
+        #     "comment_reaction_count": reactions.get("reaction_count"),
+        # }
 
     def extract_comment_replies(self, replies_url):
-        if not self.options.get("progress"):
-            logger.debug(f"Fetching {replies_url}")
-        try:
-            # Some users have to use an AJAX POST method to get replies.
-            # Check if this is the case by checking for the element that holds the encrypted response token
-            use_ajax_post = (
-                self.full_post_html.find("input[name='fb_dtsg']", first=True) is not None
-            )
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # if not self.options.get("progress"):
+        #     logger.debug(f"Fetching {replies_url}")
+        # try:
+        #     # Some users have to use an AJAX POST method to get replies.
+        #     # Check if this is the case by checking for the element that holds the encrypted response token
+        #     use_ajax_post = (
+        #         self.full_post_html.find("input[name='fb_dtsg']", first=True) is not None
+        #     )
 
-            if use_ajax_post:
-                fb_dtsg = self.full_post_html.find("input[name='fb_dtsg']", first=True).attrs[
-                    "value"
-                ]
-                encryptedAjaxResponseToken = re.search(
-                    r'encrypted":"([^"]+)', self.full_post_html.html
-                ).group(1)
-                response = self.request(
-                    replies_url,
-                    post=True,
-                    params={"fb_dtsg": fb_dtsg, "__a": encryptedAjaxResponseToken},
-                )
-            else:
-                use_ajax_post = False
-                response = self.request(replies_url)
+        #     if use_ajax_post:
+        #         fb_dtsg = self.full_post_html.find("input[name='fb_dtsg']", first=True).attrs[
+        #             "value"
+        #         ]
+        #         encryptedAjaxResponseToken = re.search(
+        #             r'encrypted":"([^"]+)', self.full_post_html.html
+        #         ).group(1)
+        #         response = self.request(
+        #             replies_url,
+        #             post=True,
+        #             params={"fb_dtsg": fb_dtsg, "__a": encryptedAjaxResponseToken},
+        #         )
+        #     else:
+        #         use_ajax_post = False
+        #         response = self.request(replies_url)
 
-        except exceptions.TemporarilyBanned:
-            raise
-        except Exception as e:
-            logger.error(e)
-            return
+        # except exceptions.TemporarilyBanned:
+        #     raise
+        # except Exception as e:
+        #     logger.error(e)
+        #     return
 
-        if use_ajax_post:
-            prefix_length = len('for (;;);')
-            data = json.loads(response.text[prefix_length:])  # Strip 'for (;;);'
-            for action in data['payload']['actions']:
-                if action["cmd"] == "replace":
-                    html = utils.make_html_element(
-                        action['html'],
-                        url=FB_MOBILE_BASE_URL,
-                    )
-                    break
+        # if use_ajax_post:
+        #     prefix_length = len('for (;;);')
+        #     data = json.loads(response.text[prefix_length:])  # Strip 'for (;;);'
+        #     for action in data['payload']['actions']:
+        #         if action["cmd"] == "replace":
+        #             html = utils.make_html_element(
+        #                 action['html'],
+        #                 url=FB_MOBILE_BASE_URL,
+        #             )
+        #             break
 
-            reply_selector = 'div[data-sigil="comment inline-reply"]'
+        #     reply_selector = 'div[data-sigil="comment inline-reply"]'
 
-            if self.options.get("noscript"):
-                reply_selector = '#root div[id]'
-            replies = html.find(reply_selector)
+        #     if self.options.get("noscript"):
+        #         reply_selector = '#root div[id]'
+        #     replies = html.find(reply_selector)
 
-        else:
-            # Skip first element, as it will be this comment itself
-            reply_selector = 'div[data-sigil="comment"]'
-            replies = response.html.find(reply_selector)[1:]
+        # else:
+        #     # Skip first element, as it will be this comment itself
+        #     reply_selector = 'div[data-sigil="comment"]'
+        #     replies = response.html.find(reply_selector)[1:]
 
-        try:
-            for reply in replies:
-                yield self.parse_comment(reply)
-        except exceptions.TemporarilyBanned:
-            raise
-        except Exception as e:
-            logger.error(f"Unable to parse comment {replies_url} replies {replies}: {e}")
+        # try:
+        #     for reply in replies:
+        #         yield self.parse_comment(reply)
+        # except exceptions.TemporarilyBanned:
+        #     raise
+        # except Exception as e:
+        #     logger.error(f"Unable to parse comment {replies_url} replies {replies}: {e}")
 
     def extract_comment_with_replies(self, comment):
-        try:
-            result = self.parse_comment(comment)
-            result["replies"] = [
-                self.parse_comment(reply)
-                for reply in comment.find("div[data-sigil='comment inline-reply']")
-            ]
-            replies_url = comment.find(
-                "div.async_elem[data-sigil='replies-see-more'] a[href],div[id*='comment_replies_more'] a[href]",
-                first=True,
-            )
-            if replies_url:
-                reply_generator = self.extract_comment_replies(replies_url.attrs["href"])
-                if result["replies"]:
-                    result["replies"] = itertools.chain(result["replies"], reply_generator)
-                else:
-                    result["replies"] = reply_generator
-            return result
-        except exceptions.TemporarilyBanned:
-            raise
-        except Exception as e:
-            logger.error(f"Unable to parse comment {comment}: {e}")
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # try:
+        #     result = self.parse_comment(comment)
+        #     result["replies"] = [
+        #         self.parse_comment(reply)
+        #         for reply in comment.find("div[data-sigil='comment inline-reply']")
+        #     ]
+        #     replies_url = comment.find(
+        #         "div.async_elem[data-sigil='replies-see-more'] a[href],div[id*='comment_replies_more'] a[href]",
+        #         first=True,
+        #     )
+        #     if replies_url:
+        #         reply_generator = self.extract_comment_replies(replies_url.attrs["href"])
+        #         if result["replies"]:
+        #             result["replies"] = itertools.chain(result["replies"], reply_generator)
+        #         else:
+        #             result["replies"] = reply_generator
+        #     return result
+        # except exceptions.TemporarilyBanned:
+        #     raise
+        # except Exception as e:
+        #     logger.error(f"Unable to parse comment {comment}: {e}")
 
     def extract_comments_full(self):
-        """Fetch comments for an existing post obtained by `get_posts`.
-        Note that this method may raise multiple http requests per post to get all comments"""
-        if not self.full_post_html:
-            logger.error("Unable to get comments without full post HTML")
-            return
-        comments_area_selector = 'div[id^="ufi_"]'
-        elem = self.full_post_html.find(comments_area_selector, first=True)
-        if not elem:
-            logger.error("No comments area found")
-            return
-        comments_selector = 'div[data-sigil="comment"]'
-        if self.options.get("noscript"):
-            comments_selector = f"{comments_area_selector}>div>div:not(id)>div"
-        comments = list(elem.find(comments_selector))
-        if not comments:
-            logger.warning("No comments found on page")
-            return
+        #### I HAVE EDITTED THIS FUNCTION TO RETURN NONE TO AVOID UNNECESSARY REQUESTS. SEARCH ANIKET. ####
+        return None
+        # """Fetch comments for an existing post obtained by `get_posts`.
+        # Note that this method may raise multiple http requests per post to get all comments"""
+        # if not self.full_post_html:
+        #     logger.error("Unable to get comments without full post HTML")
+        #     return
+        # comments_area_selector = 'div[id^="ufi_"]'
+        # elem = self.full_post_html.find(comments_area_selector, first=True)
+        # if not elem:
+        #     logger.error("No comments area found")
+        #     return
+        # comments_selector = 'div[data-sigil="comment"]'
+        # if self.options.get("noscript"):
+        #     comments_selector = f"{comments_area_selector}>div>div:not(id)>div"
+        # comments = list(elem.find(comments_selector))
+        # if not comments:
+        #     logger.warning("No comments found on page")
+        #     return
 
-        for comment in comments:
-            result = self.extract_comment_with_replies(comment)
-            if result:
-                yield result
+        # for comment in comments:
+        #     result = self.extract_comment_with_replies(comment)
+        #     if result:
+        #         yield result
 
-        more_selector = f"div#see_next_{self.post.get('post_id')} a"
-        more = elem.find(more_selector, first=True)
-        if not more:
-            more_selector = f"div#see_prev_{self.post.get('post_id')} a"
-            more = elem.find(more_selector, first=True)
+        # more_selector = f"div#see_next_{self.post.get('post_id')} a"
+        # more = elem.find(more_selector, first=True)
+        # if not more:
+        #     more_selector = f"div#see_prev_{self.post.get('post_id')} a"
+        #     more = elem.find(more_selector, first=True)
 
-        # Comment limiting and progress
-        limit = 1e9  # Default
-        if more and more.attrs.get("data-ajaxify-href"):
-            parsed = parse_qs(urlparse(more.attrs.get("data-ajaxify-href")).query)
-            count = int(parsed.get("count")[0])
-            if count < limit:
-                limit = count
-        comments_opt = self.options.get('comments')
-        if type(comments_opt) in [int, float]:
-            limit = comments_opt
-        logger.debug(f"Fetching up to {limit} comments")
+        # # Comment limiting and progress
+        # limit = 1e9  # Default
+        # if more and more.attrs.get("data-ajaxify-href"):
+        #     parsed = parse_qs(urlparse(more.attrs.get("data-ajaxify-href")).query)
+        #     count = int(parsed.get("count")[0])
+        #     if count < limit:
+        #         limit = count
+        # comments_opt = self.options.get('comments')
+        # if type(comments_opt) in [int, float]:
+        #     limit = comments_opt
+        # logger.debug(f"Fetching up to {limit} comments")
 
-        if self.options.get("progress"):
-            pbar = tqdm(total=limit)
+        # if self.options.get("progress"):
+        #     pbar = tqdm(total=limit)
 
-        visited_urls = []
-        request_url_callback = self.options.get('comment_request_url_callback')
-        more_url = None
-        if more:
-            if self.options.get("response_url"):
-                more_url = utils.combine_url_params(
-                    self.options.get("response_url"), more.attrs.get("href")
-                )
-            else:
-                more_url = (
-                    more.attrs.get("href")
-                    + "&m_entstream_source=video_home&player_suborigin=entry_point&player_format=permalink"
-                )
-        if self.options.get("comment_start_url"):
-            more_url = self.options.get("comment_start_url")
+        # visited_urls = []
+        # request_url_callback = self.options.get('comment_request_url_callback')
+        # more_url = None
+        # if more:
+        #     if self.options.get("response_url"):
+        #         more_url = utils.combine_url_params(
+        #             self.options.get("response_url"), more.attrs.get("href")
+        #         )
+        #     else:
+        #         more_url = (
+        #             more.attrs.get("href")
+        #             + "&m_entstream_source=video_home&player_suborigin=entry_point&player_format=permalink"
+        #         )
+        # if self.options.get("comment_start_url"):
+        #     more_url = self.options.get("comment_start_url")
 
-        while more_url and len(comments) <= limit:
-            if request_url_callback:
-                request_url_callback(utils.urljoin(FB_MOBILE_BASE_URL, more_url))
-            if more_url in visited_urls:
-                logger.debug("cycle detected, break")
-                break
-            if self.options.get("progress"):
-                pbar.update(30)
-            else:
-                logger.debug(f"Fetching {more_url}")
-            try:
-                response = self.request(more_url)
-            except exceptions.TemporarilyBanned:
-                raise
-            except Exception as e:
-                logger.error(e)
-                break
-            visited_urls.append(more_url)
-            elem = response.html.find(comments_area_selector, first=True)
-            if not elem:
-                logger.warning("No comments found on page")
-                break
-            more_comments = elem.find(comments_selector)
-            comments.extend(more_comments)
-            if not more_comments:
-                logger.warning("No comments found on page")
-                break
-            for comment in more_comments:
-                result = self.extract_comment_with_replies(comment)
-                if result:
-                    yield result
-            more = elem.find(more_selector, first=True)
-            if more:
-                if self.options.get("response_url"):
-                    more_url = utils.combine_url_params(
-                        self.options.get("response_url"), more.attrs.get("href")
-                    )
-                else:
-                    more_url = (
-                        more.attrs.get("href")
-                        + "&m_entstream_source=video_home&player_suborigin=entry_point&player_format=permalink"
-                    )
-            else:
-                more_url = None
+        # while more_url and len(comments) <= limit:
+        #     if request_url_callback:
+        #         request_url_callback(utils.urljoin(FB_MOBILE_BASE_URL, more_url))
+        #     if more_url in visited_urls:
+        #         logger.debug("cycle detected, break")
+        #         break
+        #     if self.options.get("progress"):
+        #         pbar.update(30)
+        #     else:
+        #         logger.debug(f"Fetching {more_url}")
+        #     try:
+        #         response = self.request(more_url)
+        #     except exceptions.TemporarilyBanned:
+        #         raise
+        #     except Exception as e:
+        #         logger.error(e)
+        #         break
+        #     visited_urls.append(more_url)
+        #     elem = response.html.find(comments_area_selector, first=True)
+        #     if not elem:
+        #         logger.warning("No comments found on page")
+        #         break
+        #     more_comments = elem.find(comments_selector)
+        #     comments.extend(more_comments)
+        #     if not more_comments:
+        #         logger.warning("No comments found on page")
+        #         break
+        #     for comment in more_comments:
+        #         result = self.extract_comment_with_replies(comment)
+        #         if result:
+        #             yield result
+        #     more = elem.find(more_selector, first=True)
+        #     if more:
+        #         if self.options.get("response_url"):
+        #             more_url = utils.combine_url_params(
+        #                 self.options.get("response_url"), more.attrs.get("href")
+        #             )
+        #         else:
+        #             more_url = (
+        #                 more.attrs.get("href")
+        #                 + "&m_entstream_source=video_home&player_suborigin=entry_point&player_format=permalink"
+        #             )
+        #     else:
+        #         more_url = None
 
     def parse_share_and_reactions(self, html: str):
         bad_jsons = self.shares_and_reactions_regex.findall(html)
